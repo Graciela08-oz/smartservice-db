@@ -1,0 +1,204 @@
+
+-- 1. MÓDULO: SEGURIDAD Y USUARIOS
+
+CREATE TABLE ROL (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    descripcion TEXT
+);
+
+CREATE TABLE USUARIO (
+    id SERIAL PRIMARY KEY,
+    rol_id INT NOT NULL REFERENCES ROL(id) ON DELETE RESTRICT,
+    nombre VARCHAR(150) NOT NULL,
+    correo VARCHAR(150) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    telefono VARCHAR(30),
+    estado BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE BITACORA (
+    id SERIAL PRIMARY KEY,
+    usuario_id INT NOT NULL REFERENCES USUARIO(id) ON DELETE CASCADE,
+    fecha_hora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    accion VARCHAR(100) NOT NULL,
+    descripcion TEXT
+);
+
+-- 2. MÓDULO: CLIENTES Y ESTABLECIMIENTOS
+
+CREATE TABLE CLIENTE (
+    id SERIAL PRIMARY KEY,
+    tipo_cliente VARCHAR(50) NOT NULL,
+    razon_social VARCHAR(200) NOT NULL,
+    documento_identidad VARCHAR(50) NOT NULL UNIQUE,
+    correo VARCHAR(150),
+    telefono VARCHAR(30),
+    fecha_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE ESTABLECIMIENTO (
+    id SERIAL PRIMARY KEY,
+    cliente_id INT NOT NULL REFERENCES CLIENTE(id) ON DELETE CASCADE,
+    nombre_establecimiento VARCHAR(150) NOT NULL,
+    direccion VARCHAR(255) NOT NULL,
+    tipo_inmueble VARCHAR(100),
+    latitud DECIMAL(10, 8),
+    longitud DECIMAL(11, 8)
+);
+
+CREATE TABLE SISTEMA_INSTALADO (
+    id SERIAL PRIMARY KEY,
+    establecimiento_id INT NOT NULL REFERENCES ESTABLECIMIENTO(id) ON DELETE CASCADE,
+    nombre_sistema VARCHAR(150) NOT NULL,
+    fecha_instalacion DATE,
+    numero_serie VARCHAR(100),
+    periodicidad_meses INT DEFAULT 6,
+    fecha_ultimo_mantenimiento DATE,
+    fecha_proximo_mantenimiento DATE,
+    observaciones TEXT
+);
+
+-- 3. MÓDULO: CATÁLOGO E INVENTARIO
+
+CREATE TABLE CATEGORIA_PRODUCTO (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL UNIQUE,
+    descripcion TEXT
+);
+
+CREATE TABLE PRODUCTO (
+    id SERIAL PRIMARY KEY,
+    categoria_producto_id INT NOT NULL REFERENCES CATEGORIA_PRODUCTO(id) ON DELETE RESTRICT,
+    nombre VARCHAR(150) NOT NULL,
+    descripcion_tecnica TEXT,
+    unidad_medida VARCHAR(50) NOT NULL,
+    margen_ganancia DECIMAL(5,2) DEFAULT 0.00,
+    precio_compra_actual DECIMAL(12,2) NOT NULL CHECK (precio_compra_actual >= 0),
+    stock_disponible INT NOT NULL DEFAULT 0 CHECK (stock_disponible >= 0),
+    stock_minimo INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE SERVICIO (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    descripcion TEXT,
+    precio_hora_base DECIMAL(12,2) NOT NULL CHECK (precio_hora_base >= 0)
+);
+
+CREATE TABLE PROVEEDOR (
+    id SERIAL PRIMARY KEY,
+    razon_social VARCHAR(200) NOT NULL,
+    nit VARCHAR(50) NOT NULL UNIQUE,
+    contacto VARCHAR(150),
+    telefono VARCHAR(30),
+    correo VARCHAR(150)
+);
+
+CREATE TABLE PRODUCTO_PROVEEDOR (
+    id SERIAL PRIMARY KEY,
+    producto_id INT NOT NULL REFERENCES PRODUCTO(id) ON DELETE CASCADE,
+    proveedor_id INT NOT NULL REFERENCES PROVEEDOR(id) ON DELETE CASCADE,
+    codigo_item_proveedor VARCHAR(100),
+    CONSTRAINT unique_producto_proveedor UNIQUE (producto_id, proveedor_id)
+);
+
+CREATE TABLE MOVIMIENTO_KARDEX (
+    id SERIAL PRIMARY KEY,
+    producto_id INT NOT NULL REFERENCES PRODUCTO(id) ON DELETE RESTRICT,
+    usuario_id INT NOT NULL REFERENCES USUARIO(id) ON DELETE RESTRICT,
+    tipo_movimiento VARCHAR(50) NOT NULL, -- 'ENTRADA', 'SALIDA', 'AJUSTE'
+    cantidad INT NOT NULL,
+    stock_anterior INT NOT NULL,
+    origen_movimiento VARCHAR(100),
+    fecha_movimiento TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    observacion TEXT
+);
+
+-- 4. MÓDULO: COTIZACIONES
+
+CREATE TABLE COTIZACION (
+    id SERIAL PRIMARY KEY,
+    cliente_id INT NOT NULL REFERENCES CLIENTE(id) ON DELETE RESTRICT,
+    establecimiento_id INT REFERENCES ESTABLECIMIENTO(id) ON DELETE SET NULL,
+    usuario_id INT NOT NULL REFERENCES USUARIO(id) ON DELETE RESTRICT,
+    numero_cotizacion VARCHAR(50) NOT NULL UNIQUE,
+    fecha_emision DATE NOT NULL DEFAULT CURRENT_DATE,
+    fecha_vencimiento DATE NOT NULL,
+    estado VARCHAR(50) NOT NULL DEFAULT 'PENDIENTE' -- 'PENDIENTE', 'APROBADA', 'RECHAZADA'
+);
+
+CREATE TABLE DETALLE_COTIZACION_PRODUCTO (
+    id SERIAL PRIMARY KEY,
+    cotizacion_id INT NOT NULL REFERENCES COTIZACION(id) ON DELETE CASCADE,
+    producto_id INT NOT NULL REFERENCES PRODUCTO(id) ON DELETE RESTRICT,
+    cantidad INT NOT NULL CHECK (cantidad > 0),
+    precio_unitario DECIMAL(12,2) NOT NULL CHECK (precio_unitario >= 0)
+);
+
+CREATE TABLE DETALLE_COTIZACION_SERVICIO (
+    id SERIAL PRIMARY KEY,
+    cotizacion_id INT NOT NULL REFERENCES COTIZACION(id) ON DELETE CASCADE,
+    servicio_id INT NOT NULL REFERENCES SERVICIO(id) ON DELETE RESTRICT,
+    horas_estimadas DECIMAL(8,2) NOT NULL CHECK (horas_estimadas > 0),
+    precio_hora DECIMAL(12,2) NOT NULL CHECK (precio_hora >= 0)
+);
+
+-- 5. MÓDULO: OPERACIONES Y LOGÍSTICA
+
+CREATE TABLE ORDEN_TRABAJO (
+    id SERIAL PRIMARY KEY,
+    cotizacion_id INT REFERENCES COTIZACION(id) ON DELETE SET NULL,
+    codigo_orden VARCHAR(50) NOT NULL UNIQUE,
+    tipo_trabajo VARCHAR(100) NOT NULL,
+    estado VARCHAR(50) NOT NULL DEFAULT 'PROGRAMADA',
+    fecha_programada DATE NOT NULL,
+    fecha_inicio_real TIMESTAMP,
+    fecha_fin_real TIMESTAMP,
+    observaciones_tecnico TEXT
+);
+
+CREATE TABLE ORDEN_TRABAJO_TECNICO (
+    id SERIAL PRIMARY KEY,
+    orden_trabajo_id INT NOT NULL REFERENCES ORDEN_TRABAJO(id) ON DELETE CASCADE,
+    usuario_id INT NOT NULL REFERENCES USUARIO(id) ON DELETE RESTRICT,
+    es_lider BOOLEAN NOT NULL DEFAULT FALSE,
+    CONSTRAINT unique_orden_tecnico UNIQUE (orden_trabajo_id, usuario_id)
+);
+
+CREATE TABLE DETALLE_CONSUMO_MATERIAL (
+    id SERIAL PRIMARY KEY,
+    orden_trabajo_id INT NOT NULL REFERENCES ORDEN_TRABAJO(id) ON DELETE CASCADE,
+    producto_id INT NOT NULL REFERENCES PRODUCTO(id) ON DELETE RESTRICT,
+    cantidad_utilizada INT NOT NULL CHECK (cantidad_utilizada > 0),
+    fecha_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE NOTA_SERVICIO (
+    id SERIAL PRIMARY KEY,
+    orden_trabajo_id INT NOT NULL REFERENCES ORDEN_TRABAJO(id) ON DELETE CASCADE,
+    numero_nota VARCHAR(50) NOT NULL UNIQUE,
+    anticipo_pagado DECIMAL(12,2) DEFAULT 0.00 CHECK (anticipo_pagado >= 0),
+    fecha_emision TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. MÓDULO: POST-VENTA Y MANTENIMIENTO
+
+CREATE TABLE MANTENIMIENTO_TICKET (
+    id SERIAL PRIMARY KEY,
+    sistema_instalado_id INT NOT NULL REFERENCES SISTEMA_INSTALADO(id) ON DELETE CASCADE,
+    orden_trabajo_id INT REFERENCES ORDEN_TRABAJO(id) ON DELETE SET NULL,
+    tipo_mantenimiento VARCHAR(50) NOT NULL, -- 'PREVENTIVO', 'CORRECTIVO'
+    nivel_urgencia VARCHAR(50) NOT NULL,
+    descripcion_incidencia TEXT NOT NULL,
+    fecha_reporte TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    estado VARCHAR(50) NOT NULL DEFAULT 'ABIERTO'
+);
+
+CREATE TABLE ALERTA_NOTIFICACION (
+    id SERIAL PRIMARY KEY,
+    sistema_instalado_id INT NOT NULL REFERENCES SISTEMA_INSTALADO(id) ON DELETE CASCADE,
+    mensaje TEXT NOT NULL,
+    fecha_alerta DATE NOT NULL,
+    leido BOOLEAN NOT NULL DEFAULT FALSE
+);
